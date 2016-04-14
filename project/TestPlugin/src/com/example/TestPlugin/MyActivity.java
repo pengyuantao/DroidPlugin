@@ -60,7 +60,7 @@ public class MyActivity extends ActionBarActivity {
         setContentView(R.layout.main);
         mViewPager = (ViewPager) findViewById(R.id.pager);
         mViewPager.setAdapter(mFragmentStatePagerAdapter);
-//        getPerms();
+        getPerms();
     }
 
     private void getPerms() {

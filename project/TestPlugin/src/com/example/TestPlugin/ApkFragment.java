@@ -3,18 +3,25 @@ package com.example.TestPlugin;
 import android.app.AlertDialog;
 import android.app.AlertDialog.Builder;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.ServiceConnection;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.nfc.Tag;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
+import android.os.storage.StorageManager;
 import android.support.v4.app.ListFragment;
+import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.TextureView;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
@@ -23,15 +30,24 @@ import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import com.morgoo.droidplugin.pm.PluginManager;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.lang.reflect.Array;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class ApkFragment extends ListFragment implements ServiceConnection {
     private ArrayAdapter<ApkItem> adapter;
     final Handler handler = new Handler();
+    private static final String TAG = "ApkFragment";
 
     public ApkFragment() {
     }
@@ -158,6 +174,7 @@ public class ApkFragment extends ListFragment implements ServiceConnection {
             public void run() {
                 File file = Environment.getExternalStorageDirectory();
 
+                //遍历内置储存卡的根目录
                 List<File> apks = new ArrayList<File>(10);
                 for (File apk : file.listFiles()) {
                     if (apk.exists() && apk.getPath().toLowerCase().endsWith(".apk")) {
@@ -165,6 +182,7 @@ public class ApkFragment extends ListFragment implements ServiceConnection {
                     }
                 }
 
+                //遍历360下载的根目录
                 file = new File(Environment.getExternalStorageDirectory(), "360Download");
                 if (file.exists() && file.isDirectory()) {
                     for (File apk : file.listFiles()) {
@@ -173,6 +191,27 @@ public class ApkFragment extends ListFragment implements ServiceConnection {
                         }
                     }
                 }
+                //遍历外置内存卡目录
+                String _StorePath = getStoragePath(ApkFragment.this.getActivity(), true);
+//                String _StorePath = getStoragePath(ApkFragment.this.getActivity(), true);
+                Log.e(TAG, "外置内存卡的文件路径：" + _StorePath);
+
+                if (!TextUtils.isEmpty(_StorePath)) {
+                    file = new File(_StorePath);
+                    if (file != null && file.exists() && file.isDirectory()) {
+                        File[] files = file.listFiles();
+                        if (files != null) {
+                            for (File apk : file.listFiles()) {
+                                if (apk.exists() && apk.getPath().toLowerCase().endsWith(".apk")) {
+                                    apks.add(apk);
+                                }
+                            }
+                        }
+
+                    }
+                }
+
+
                 PackageManager pm = getActivity().getPackageManager();
                 for (final File apk : apks) {
                     try {
@@ -180,12 +219,12 @@ public class ApkFragment extends ListFragment implements ServiceConnection {
                             final PackageInfo info = pm.getPackageArchiveInfo(apk.getPath(), 0);
                             if (info != null && isViewCreated) {
                                 try {
-                                   handler.post(new Runnable() {
-                                       @Override
-                                       public void run() {
-                                           adapter.add(new ApkItem(getActivity(), info, apk.getPath()));
-                                       }
-                                   });
+                                    handler.post(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            adapter.add(new ApkItem(getActivity(), info, apk.getPath()));
+                                        }
+                                    });
                                 } catch (Exception e) {
                                 }
                             }
@@ -271,5 +310,44 @@ public class ApkFragment extends ListFragment implements ServiceConnection {
     public void onDestroy() {
         PluginManager.getInstance().removeServiceConnection(this);
         super.onDestroy();
+    }
+
+
+    /**
+     * 通过反射获取内置储存卡和外置存储卡的位置路径
+     *
+     * @param mContext
+     * @param is_removale true为外置，false为内置
+     * @return
+     */
+    private static String getStoragePath(Context mContext, boolean is_removale) {
+
+        StorageManager mStorageManager = (StorageManager) mContext.getSystemService(Context.STORAGE_SERVICE);
+        Class<?> storageVolumeClazz = null;
+        try {
+            storageVolumeClazz = Class.forName("android.os.storage.StorageVolume");
+            Method getVolumeList = mStorageManager.getClass().getMethod("getVolumeList");
+            Method getPath = storageVolumeClazz.getMethod("getPath");
+            Method isRemovable = storageVolumeClazz.getMethod("isRemovable");
+            Object result = getVolumeList.invoke(mStorageManager);
+            final int length = Array.getLength(result);
+            for (int i = 0; i < length; i++) {
+                Object storageVolumeElement = Array.get(result, i);
+                String path = (String) getPath.invoke(storageVolumeElement);
+                boolean removable = (Boolean) isRemovable.invoke(storageVolumeElement);
+                if (is_removale == removable) {
+                    return path;
+                }
+            }
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }

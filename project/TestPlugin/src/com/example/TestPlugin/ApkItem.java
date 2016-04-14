@@ -61,6 +61,7 @@ public class ApkItem {
     }
 
     public static Resources getResources(Context context, String apkPath) throws Exception {
+        //通过反射获取安装包的Resource类，从而获取应用的信息
         String PATH_AssetManager = "android.content.res.AssetManager";
         Class assetMagCls = Class.forName(PATH_AssetManager);
         Constructor assetMagCt = assetMagCls.getConstructor((Class[]) null);
